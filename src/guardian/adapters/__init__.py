@@ -8,6 +8,7 @@ from src.guardian.adapters.github_client import (
     GitHubNotFoundError,
     GitHubRateLimitError,
     IssueSummary,
+    PullRequestMetadata,
     RepositoryMetadata,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "GitHubNotFoundError",
     "GitHubRateLimitError",
     "IssueSummary",
+    "PullRequestMetadata",
     "RepositoryMetadata",
 ]

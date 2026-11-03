@@ -45,6 +45,24 @@ class IssueSummary(BaseModel):
     created_at: str = Field(description="Creation ISO timestamp")
 
 
+class PullRequestMetadata(BaseModel):
+    """Normalized pull request metadata."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    number: int = Field(description="Pull request number")
+    title: str = Field(description="Pull request title")
+    state: str = Field(default="open", description="State (e.g. open, closed)")
+    html_url: str = Field(description="Web URL for the pull request")
+    author: str | None = Field(default=None, description="Author login")
+    base_branch: str | None = Field(default=None, description="Target base branch")
+    head_branch: str | None = Field(default=None, description="Source head branch")
+    additions: int = Field(default=0, description="Number of added lines")
+    deletions: int = Field(default=0, description="Number of deleted lines")
+    changed_files: int = Field(default=0, description="Number of changed files")
+    body: str | None = Field(default=None, description="Pull request description/body")
+
+
 # ---------------------------------------------------------------------------
 # Exception Hierarchy
 # ---------------------------------------------------------------------------
@@ -332,6 +350,52 @@ class GitHubClient:
             )
 
         return issues
+
+    async def get_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        pull_number: int,
+    ) -> PullRequestMetadata:
+        """Fetch pull request metadata.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pull_number: Pull request number.
+
+        Returns:
+            Normalized PullRequestMetadata object.
+        """
+        self._validate_repo_coords(owner, repo)
+        if pull_number <= 0:
+            raise ValueError("Pull request number must be positive.")
+
+        response = await self._request("GET", f"/repos/{owner}/{repo}/pulls/{pull_number}")
+        data = response.json()
+
+        user_obj = data.get("user") or {}
+        author_login = user_obj.get("login") if isinstance(user_obj, dict) else None
+
+        base_obj = data.get("base") or {}
+        base_ref = base_obj.get("ref") if isinstance(base_obj, dict) else None
+
+        head_obj = data.get("head") or {}
+        head_ref = head_obj.get("ref") if isinstance(head_obj, dict) else None
+
+        return PullRequestMetadata(
+            number=data.get("number", pull_number),
+            title=data.get("title", ""),
+            state=data.get("state", "open"),
+            html_url=data.get("html_url", f"https://github.com/{owner}/{repo}/pull/{pull_number}"),
+            author=author_login,
+            base_branch=base_ref,
+            head_branch=head_ref,
+            additions=data.get("additions", 0),
+            deletions=data.get("deletions", 0),
+            changed_files=data.get("changed_files", 0),
+            body=data.get("body"),
+        )
 
     async def get_pull_request_diff(
         self,

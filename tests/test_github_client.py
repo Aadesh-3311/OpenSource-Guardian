@@ -12,6 +12,7 @@ from src.guardian.adapters.github_client import (
     GitHubNetworkError,
     GitHubNotFoundError,
     GitHubRateLimitError,
+    PullRequestMetadata,
 )
 from src.guardian.config.settings import Settings
 
@@ -307,3 +308,120 @@ async def test_injected_client_lifecycle_preserved() -> None:
         assert not shared_client.is_closed
 
     assert shared_client.is_closed
+
+
+@pytest.mark.anyio
+async def test_get_pull_request_metadata_success() -> None:
+    """Verify successful pull request metadata retrieval and field mapping."""
+    mock_pr = {
+        "number": 42,
+        "title": "Add educational reviewer module",
+        "state": "open",
+        "html_url": "https://github.com/aadesh-2006/OpenSource-Guardian/pull/42",
+        "user": {"login": "octocat"},
+        "base": {"ref": "main"},
+        "head": {"ref": "feature-pr-reviewer"},
+        "additions": 150,
+        "deletions": 10,
+        "changed_files": 4,
+        "body": "Implements the PR review heuristics.",
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/repos/aadesh-2006/OpenSource-Guardian/pulls/42"
+        return httpx.Response(200, json=mock_pr)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = GitHubClient(client=http_client)
+        pr = await client.get_pull_request("aadesh-2006", "OpenSource-Guardian", 42)
+
+        assert isinstance(pr, PullRequestMetadata)
+        assert pr.number == 42
+        assert pr.title == "Add educational reviewer module"
+        assert pr.state == "open"
+        assert pr.author == "octocat"
+        assert pr.base_branch == "main"
+        assert pr.head_branch == "feature-pr-reviewer"
+        assert pr.additions == 150
+        assert pr.deletions == 10
+        assert pr.changed_files == 4
+        assert pr.body == "Implements the PR review heuristics."
+
+
+@pytest.mark.anyio
+async def test_get_pull_request_metadata_nullable_fields() -> None:
+    """Verify pull request metadata handles missing/null body and missing user object."""
+    mock_pr = {
+        "number": 7,
+        "title": "Quick fix",
+        "state": "closed",
+        "html_url": "https://github.com/aadesh-2006/OpenSource-Guardian/pull/7",
+        "user": None,
+        "base": None,
+        "head": None,
+        "body": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=mock_pr)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = GitHubClient(client=http_client)
+        pr = await client.get_pull_request("aadesh-2006", "OpenSource-Guardian", 7)
+
+        assert pr.number == 7
+        assert pr.author is None
+        assert pr.body is None
+        assert pr.base_branch is None
+        assert pr.head_branch is None
+        assert pr.additions == 0
+        assert pr.deletions == 0
+
+
+@pytest.mark.anyio
+async def test_get_pull_request_metadata_not_found() -> None:
+    """Verify 404 response raises GitHubNotFoundError."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "Not Found"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = GitHubClient(client=http_client)
+        with pytest.raises(GitHubNotFoundError) as exc_info:
+            await client.get_pull_request("aadesh-2006", "OpenSource-Guardian", 999)
+
+        assert exc_info.value.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_get_pull_request_metadata_auth_error() -> None:
+    """Verify 401 response raises GitHubAuthError without leaking credentials."""
+    secret = "ghp_super_secret"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"message": "Bad credentials"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = GitHubClient(token=SecretStr(secret), client=http_client)
+        with pytest.raises(GitHubAuthError) as exc_info:
+            await client.get_pull_request("aadesh-2006", "OpenSource-Guardian", 42)
+
+        assert exc_info.value.status_code == 401
+        assert secret not in str(exc_info.value)
+
+
+@pytest.mark.anyio
+async def test_get_pull_request_metadata_invalid_number() -> None:
+    """Verify invalid PR numbers (<= 0) raise ValueError."""
+    client = GitHubClient()
+    with pytest.raises(ValueError, match="positive"):
+        await client.get_pull_request("aadesh-2006", "OpenSource-Guardian", 0)
+
+    with pytest.raises(ValueError, match="positive"):
+        await client.get_pull_request("aadesh-2006", "OpenSource-Guardian", -5)
+
+    await client.aclose()
