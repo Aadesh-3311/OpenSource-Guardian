@@ -45,9 +45,15 @@ def test_custom_settings_app_factory() -> None:
 
 def test_settings_secret_masking() -> None:
     """Verify secrets are masked in representation and not exposed in safe summary."""
-    settings = Settings(api_secret_key="super-secret-token")  # type: ignore[arg-type]
+    settings = Settings(
+        api_secret_key="super-secret-token",  # type: ignore[arg-type]
+        github_token="ghp_super_secret_github_token",  # type: ignore[arg-type]
+    )
     repr_str = repr(settings)
     assert "super-secret-token" not in repr_str
+    assert "ghp_super_secret_github_token" not in repr_str
 
     summary = settings.safe_summary()
     assert "api_secret_key" not in summary
+    assert "github_token" not in summary
+    assert summary["github_api_base_url"] == "https://api.github.com"

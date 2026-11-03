@@ -42,10 +42,20 @@ class Settings(BaseSettings):
         description="Port for the HTTP server",
     )
 
-    # Optional secrets placeholder (masked via SecretStr to prevent leak in logs/repr)
+    # Optional internal secret key (masked via SecretStr to prevent leak in logs/repr)
     api_secret_key: SecretStr | None = Field(
         default=None,
         description="Optional API secret key for internal routes",
+    )
+
+    # GitHub Integration Settings
+    github_token: SecretStr | None = Field(
+        default=None,
+        description="Optional GitHub personal access token for authenticated requests",
+    )
+    github_api_base_url: str = Field(
+        default="https://api.github.com",
+        description="Base URL for the GitHub REST API",
     )
 
     def safe_summary(self) -> dict[str, str | int]:
@@ -56,6 +66,7 @@ class Settings(BaseSettings):
             "log_level": self.log_level,
             "host": self.host,
             "port": self.port,
+            "github_api_base_url": self.github_api_base_url,
         }
 
 
