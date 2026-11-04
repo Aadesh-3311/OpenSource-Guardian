@@ -13,6 +13,9 @@ from src.guardian.modules.pr_reviewer import (
     DiffHunk,
     DiffLine,
     FileDiff,
+    PRReviewReport,
+    PRReviewer,
+    ReviewFinding,
     parse_unified_diff,
 )
 
@@ -23,7 +26,10 @@ __all__ = [
     "IssueDiscoveryReport",
     "IssueFinder",
     "OnboardingReport",
+    "PRReviewReport",
+    "PRReviewer",
     "RankedIssue",
     "RepoOnboarder",
+    "ReviewFinding",
     "parse_unified_diff",
 ]
