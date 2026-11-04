@@ -355,20 +355,26 @@ class PRReviewer:
         self,
         owner: str,
         repo: str,
-        pull_number: int,
+        pull_number: int | None = None,
+        *,
+        pr_number: int | None = None,
     ) -> PRReviewReport:
         """Fetch PR metadata and diff, run educational review heuristics, and generate report.
 
         Args:
             owner: Repository owner.
             repo: Repository name.
-            pull_number: Pull request number.
+            pull_number: Pull request number (or pr_number keyword).
 
         Returns:
             PRReviewReport containing findings, positive observations, and Markdown.
         """
-        pr_meta = await self._github.get_pull_request(owner, repo, pull_number)
-        raw_diff = await self._github.get_pull_request_diff(owner, repo, pull_number)
+        target_number = pull_number if pull_number is not None else pr_number
+        if target_number is None:
+            raise ValueError("Must provide pull_number or pr_number to review_pr")
+
+        pr_meta = await self._github.get_pull_request(owner, repo, target_number)
+        raw_diff = await self._github.get_pull_request_diff(owner, repo, target_number)
         files = parse_unified_diff(raw_diff)
         return self.evaluate(pr_meta, files)
 

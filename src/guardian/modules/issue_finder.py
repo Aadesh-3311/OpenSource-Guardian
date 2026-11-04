@@ -115,6 +115,19 @@ class IssueFinder:
             ranked_issues=selected,
         )
 
+    async def find_good_first_issues(
+        self,
+        owner: str,
+        repo: str,
+        language: str | None = None,
+        limit: int = 10,
+    ) -> IssueDiscoveryReport:
+        """Find beginner-friendly issues, optionally filtered by language."""
+        labels = ["good first issue"]
+        if language:
+            labels.append(language)
+        return await self.find_issues(owner=owner, repo=repo, labels=labels, limit=limit)
+
     def score_issue(self, issue: IssueSummary) -> RankedIssue:
         """Compute an explicit, deterministic suitability score for an issue.
 

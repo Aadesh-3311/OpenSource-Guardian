@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field
 from src.guardian.adapters.github_client import (
     GitHubAuthError,
@@ -16,9 +16,11 @@ from src.guardian.adapters.github_client import (
 from src.guardian.adapters.switch_client import SwitchRestClient
 from src.guardian.adapters.switch_protocol import DomainEventFrame, MessagePayload
 from src.guardian.config import Settings, get_settings
-from src.guardian.modules.issue_finder import IssueFinder
-from src.guardian.modules.onboarding import RepoOnboarder
-from src.guardian.modules.pr_reviewer import PRReviewer, ReviewFinding
+
+if TYPE_CHECKING:
+    from src.guardian.modules.issue_finder import IssueFinder
+    from src.guardian.modules.onboarding import RepoOnboarder
+    from src.guardian.modules.pr_reviewer import PRReviewer, ReviewFinding
 
 logger = logging.getLogger("guardian.adapters.switch_dispatcher")
 
@@ -34,7 +36,7 @@ class ThreadContext(BaseModel):
     last_action: str = Field(description="Last executed action (e.g. review_pr, find_issues)")
     last_pr_number: int | None = Field(default=None, description="Last reviewed PR number if applicable")
     last_report_markdown: str | None = Field(default=None, description="Last generated report Markdown")
-    findings: list[ReviewFinding] = Field(default_factory=list, description="Findings from the last review")
+    findings: list[Any] = Field(default_factory=list, description="Findings from the last review")
     positive_notes: list[str] = Field(default_factory=list, description="Positive notes from the last review")
 
 
@@ -69,17 +71,33 @@ class SwitchEventDispatcher:
         self,
         switch_client: SwitchRestClient,
         github_client: GitHubClient,
-        onboarder: RepoOnboarder | None = None,
-        issue_finder: IssueFinder | None = None,
-        pr_reviewer: PRReviewer | None = None,
+        onboarder: Any | None = None,
+        issue_finder: Any | None = None,
+        pr_reviewer: Any | None = None,
         default_repo: str | None = None,
     ) -> None:
         settings: Settings = get_settings()
         self.switch_client = switch_client
         self.github_client = github_client
-        self.onboarder = onboarder or RepoOnboarder(github_client=github_client)
-        self.issue_finder = issue_finder or IssueFinder(github_client=github_client)
-        self.pr_reviewer = pr_reviewer or PRReviewer(github_client=github_client)
+
+        if onboarder is not None:
+            self.onboarder = onboarder
+        else:
+            from src.guardian.modules.onboarding import RepoOnboarder
+            self.onboarder = RepoOnboarder(github_client=github_client)
+
+        if issue_finder is not None:
+            self.issue_finder = issue_finder
+        else:
+            from src.guardian.modules.issue_finder import IssueFinder
+            self.issue_finder = IssueFinder(github_client=github_client)
+
+        if pr_reviewer is not None:
+            self.pr_reviewer = pr_reviewer
+        else:
+            from src.guardian.modules.pr_reviewer import PRReviewer
+            self.pr_reviewer = PRReviewer(github_client=github_client)
+
         self.default_repo = default_repo or settings.default_repo
         self.thread_contexts: dict[str, ThreadContext] = {}
 
@@ -91,7 +109,7 @@ class SwitchEventDispatcher:
         last_action: str,
         last_pr_number: int | None = None,
         last_report_markdown: str | None = None,
-        findings: list[ReviewFinding] | None = None,
+        findings: list[Any] | None = None,
         positive_notes: list[str] | None = None,
     ) -> None:
         """Record bounded thread conversation context for follow-up questions."""
@@ -211,7 +229,10 @@ class SwitchEventDispatcher:
             if cmd == "review_pr":
                 owner, repo, pr_number = params["owner"], params["repo"], params["pr_number"]
                 logger.info("Executing PR review for %s/%s #%d", owner, repo, pr_number)
-                report = await self.pr_reviewer.review_pr(owner=owner, repo=repo, pr_number=pr_number)
+                try:
+                    report = await self.pr_reviewer.review_pr(owner, repo, pr_number)
+                except TypeError:
+                    report = await self.pr_reviewer.review_pr(owner=owner, repo=repo, pull_number=pr_number)
                 reply_content = report.formatted_markdown
 
                 if message.thread_id:
