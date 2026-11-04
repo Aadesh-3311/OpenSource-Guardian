@@ -4,7 +4,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/pytest-78%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/pytest-83%20passed-brightgreen.svg)](tests/)
 [![Switch AI](https://img.shields.io/badge/Switch%20AI-Agent%20Bridge-7952B3.svg)](https://docs.switchagents.ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -19,11 +19,12 @@
 5. [System Architecture](#system-architecture)
 6. [Supported Commands & Interactive Workflows](#supported-commands--interactive-workflows)
 7. [Step-by-Step Setup Guide](#step-by-step-setup-guide)
-8. [Automated Pipeline Smoke Test](#automated-pipeline-smoke-test)
-9. [Security Guardrails & Safety Baselines](#security-guardrails--safety-baselines)
-10. [Known Limitations & Current Environment Status](#known-limitations--current-environment-status)
-11. [Project Structure](#project-structure)
-12. [Hackathon Milestone Progression](#hackathon-milestone-progression)
+8. [Container & Cloud Deployment (Docker & Railway)](#container--cloud-deployment-docker--railway)
+9. [Automated Pipeline Smoke Test](#automated-pipeline-smoke-test)
+10. [Security Guardrails & Safety Baselines](#security-guardrails--safety-baselines)
+11. [Known Limitations & Current Environment Status](#known-limitations--current-environment-status)
+12. [Project Structure](#project-structure)
+13. [Hackathon Milestone Progression](#hackathon-milestone-progression)
 
 ---
 
@@ -246,10 +247,70 @@ curl http://localhost:8000/health
 ```
 
 ### 7. Run the Test Suite
-Run the full test suite (78 tests covering unit, adapter, module, E2E, and protocol logic):
+Run the full test suite (83 tests covering unit, adapter, module, E2E, protocol, and server lifespan logic):
 ```bash
 pytest -v
 ```
+
+---
+
+## Container & Cloud Deployment (Docker & Railway)
+
+OpenSource Guardian is packaged with a minimal, production-ready `Dockerfile` based on `python:3.12-slim` and natively configured for deployment on **Railway**.
+
+### 1. Build and Run with Docker Locally
+
+#### Build the Docker Image
+```bash
+docker build -t opensource-guardian:latest .
+```
+
+#### Run in Health-Only Mode (Offline / Initial Smoke Test)
+```bash
+docker run --rm -p 8000:8000 opensource-guardian:latest
+```
+Verify the container health endpoint:
+```bash
+curl http://localhost:8000/health
+# Response: {"status":"healthy","app":"OpenSource Guardian","version":"0.1.0","environment":"development","mode":"health_only"}
+```
+
+#### Run with Full Switch & GitHub Integration
+```bash
+docker run --rm -p 8000:8000 \
+  -e SWITCH_API_URL="http://your-switch-server:8080" \
+  -e SWITCH_AGENT_ID="your-agent-id" \
+  -e SWITCH_API_KEY="your-switch-api-key" \
+  -e GITHUB_TOKEN="your-github-token" \
+  -e DEFAULT_REPO="aadesh-2006/OpenSource-Guardian" \
+  opensource-guardian:latest
+```
+
+---
+
+### 2. Deploying to Railway
+
+Railway runs persistent Linux containers without aggressive HTTP sleep timeouts, making it ideal for maintaining the outbound Switch WebSocket connection.
+
+1. **Create a Railway Project**:
+   - Go to [railway.app](https://railway.app) and create a new project.
+   - Select **Deploy from GitHub repo** and connect `OpenSource-Guardian`.
+2. **Configuration Detection**:
+   - Railway automatically detects [`railway.json`](file:///C:/Users/Aadesh/.gemini/antigravity/scratch/OpenSource-Guardian/railway.json) and builds using [`Dockerfile`](file:///C:/Users/Aadesh/.gemini/antigravity/scratch/OpenSource-Guardian/Dockerfile).
+   - Railway automatically sets the dynamic `$PORT` environment variable, which Uvicorn binds to automatically.
+3. **Configure Environment Variables in Railway**:
+   Under the service **Variables** tab, set:
+   - `ENVIRONMENT`: `production`
+   - `LOG_LEVEL`: `INFO`
+   - `DEFAULT_REPO`: `aadesh-2006/OpenSource-Guardian`
+   - `GITHUB_TOKEN`: Your read-only GitHub PAT
+   - `SWITCH_API_URL`: Base URL of your running Switch Core instance (e.g. `http://switch-core.railway.internal:8080` or public URL)
+   - `SWITCH_AGENT_ID`: Your registered Switch Agent ID
+   - `SWITCH_API_KEY`: Your Switch Agent bearer token
+   - `SWITCH_ROOMS`: `default` (or your target room ID)
+4. **Health Check Verification**:
+   - Railway probes the configured `healthcheckPath: "/health"` after build completion.
+   - Once verified, the service transitions to **Active**.
 
 ---
 
@@ -334,8 +395,11 @@ In accordance with hackathon evaluation standards, the following project boundar
 
 ```text
 OpenSource-Guardian/
+├── .dockerignore               # Docker build exclusions
 ├── .env.example                # Canonical environment variable configuration template
+├── Dockerfile                  # Production container definition (Python 3.12-slim)
 ├── pyproject.toml              # Dependencies and project build configuration
+├── railway.json                # Native Railway build, deploy & healthcheck configuration
 ├── README.md                   # Complete judge-ready documentation
 ├── docs/
 │   ├── ARCHITECTURE.md         # Full system architecture and Switch boundaries
