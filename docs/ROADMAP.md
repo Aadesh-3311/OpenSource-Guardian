@@ -12,12 +12,12 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
 | :--- | :--- | :--- | :--- |
 | **M0** | Repository Reconnaissance | Inspect environment, GitHub repo, and Switch docs | **Completed** |
 | **M1** | Repository Initialization | Git workspace setup, `.gitignore`, initial README | **Completed** |
-| **M2** | Architecture Specification | System architecture, boundaries, data flows, roadmap | **In Review** |
-| **M3** | Application Foundation | Python environment, `pyproject.toml`, settings, FastAPI skeleton | Next Up |
-| **M4** | GitHub Integration | Async GitHub REST API client, unit tests, mock fixtures | Planned |
-| **M5** | Onboarding & Issue Discovery | Repository summary & "good first issue" recommendation modules | Planned |
-| **M6** | PR Guardian Reviewer | Educational PR diff parsing & structured code review generator | Planned |
-| **M7** | Switch Agent Integration | Switch Agent Bridge connection (WebSocket + REST ops) | Planned |
+| **M2** | Architecture Specification | System architecture, boundaries, data flows, roadmap | **Completed** |
+| **M3** | Application Foundation | Python environment, `pyproject.toml`, settings, FastAPI skeleton | **Completed** |
+| **M4** | GitHub Integration | Async GitHub REST API client, unit tests, mock fixtures | **Completed** |
+| **M5** | Onboarding & Issue Discovery | Repository summary & "good first issue" recommendation modules | **Completed** |
+| **M6** | PR Guardian Reviewer | Educational PR diff parsing & structured code review generator | **Completed** |
+| **M7** | Switch Agent Integration | Switch Agent Bridge connection (WebSocket + REST ops) | **Completed** |
 | **M8** | End-to-End Testing | Live testing across Discord, Switch Room, and GitHub API | Planned |
 | **M9** | Polish & Hackathon Submission | Documentation, demo recording, presentation artifacts | Planned |
 
@@ -102,9 +102,9 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
     - HTTP REST client for Switch operations (`post_message`, `connect_to_room`).
   - Unit tests for message parsing and event routing.
 - **Acceptance Criteria**:
-  - [ ] Client can connect to a local or remote `switch-core` server using a registered Agent ID and Bearer token.
-  - [ ] Automatically handles connection drops and resumes via cursor tracking.
-  - [ ] Correctly routes incoming chat commands to the appropriate module (Onboarding, Issue Discovery, or PR Reviewer) and posts responses back to the room.
+  - [x] Client can connect to a local or remote `switch-core` server using a registered Agent ID and Bearer token.
+  - [x] Automatically handles connection drops and resumes via cursor tracking.
+  - [x] Correctly routes incoming chat commands to the appropriate module (Onboarding, Issue Discovery, or PR Reviewer) and posts responses back to the room.
 
 ---
 

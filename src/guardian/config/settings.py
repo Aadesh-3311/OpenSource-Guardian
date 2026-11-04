@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         default="https://api.github.com",
         description="Base URL for the GitHub REST API",
     )
+    default_repo: str = Field(
+        default="aadesh-2006/OpenSource-Guardian",
+        description="Default GitHub repository context (owner/repo)",
+    )
 
     # Switch Agent Bridge Settings
     switch_api_url: str = Field(

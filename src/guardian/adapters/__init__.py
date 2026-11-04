@@ -20,6 +20,7 @@ from src.guardian.adapters.switch_client import (
     SwitchRestClient,
     SwitchWebSocketClient,
 )
+from src.guardian.adapters.switch_dispatcher import SwitchEventDispatcher
 from src.guardian.adapters.switch_protocol import (
     ConnectionStateFrame,
     DomainEventFrame,
@@ -59,6 +60,7 @@ __all__ = [
     "SwitchAuthError",
     "SwitchClientError",
     "SwitchConflictError",
+    "SwitchEventDispatcher",
     "SwitchNetworkError",
     "SwitchNotFoundError",
     "SwitchProtocolError",
