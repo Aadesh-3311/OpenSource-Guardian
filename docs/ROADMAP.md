@@ -19,7 +19,7 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
 | **M6** | PR Guardian Reviewer | Educational PR diff parsing & structured code review generator | **Completed** |
 | **M7** | Switch Agent Integration | Switch Agent Bridge connection (WebSocket + REST ops) | **Completed** |
 | **M8** | End-to-End Testing | Live testing across Discord, Switch Room, and GitHub API | **Completed** |
-| **M9** | Polish & Hackathon Submission | Documentation, demo recording, presentation artifacts | Planned |
+| **M9** | Polish & Hackathon Submission | Documentation, demo recording, presentation artifacts | **Completed** |
 
 ---
 
@@ -126,6 +126,6 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
   - Video demonstration showing live triage in Discord via Switch.
   - Hackathon submission write-up covering problem statement, Switch integration highlights, architecture, and future vision.
 - **Acceptance Criteria**:
-  - [ ] Complete documentation with clear reproduction steps for judges.
-  - [ ] Clean repository with zero secrets or temporary artifacts committed.
-  - [ ] Working demo ready for presentation.
+  - [x] Complete documentation with clear reproduction steps for judges.
+  - [x] Clean repository with zero secrets or temporary artifacts committed.
+  - [x] Working demo ready for presentation (with reproduction paths, demo guide, and offline contract verification).
