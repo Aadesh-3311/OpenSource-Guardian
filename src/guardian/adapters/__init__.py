@@ -20,7 +20,7 @@ from src.guardian.adapters.switch_client import (
     SwitchRestClient,
     SwitchWebSocketClient,
 )
-from src.guardian.adapters.switch_dispatcher import SwitchEventDispatcher
+from src.guardian.adapters.switch_dispatcher import SwitchEventDispatcher, ThreadContext
 from src.guardian.adapters.switch_protocol import (
     ConnectionStateFrame,
     DomainEventFrame,
@@ -66,6 +66,7 @@ __all__ = [
     "SwitchProtocolError",
     "SwitchRestClient",
     "SwitchWebSocketClient",
+    "ThreadContext",
     "create_pong_frame",
     "parse_switch_frame",
 ]

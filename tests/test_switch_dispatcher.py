@@ -12,7 +12,7 @@ from src.guardian.adapters.switch_protocol import (
 )
 from src.guardian.modules.issue_finder import IssueDiscoveryReport, IssueFinder, RankedIssue
 from src.guardian.modules.onboarding import OnboardingReport, RepoOnboarder
-from src.guardian.modules.pr_reviewer import PRReviewReport, PRReviewer
+from src.guardian.modules.pr_reviewer import PRReviewReport, PRReviewer, ReviewFinding
 
 
 class MockSwitchRestClient(SwitchRestClient):
@@ -297,3 +297,139 @@ async def test_dispatch_domain_event_frame() -> None:
     await dispatcher.dispatch_event(frame)
     assert len(mock_switch.posted_messages) == 1
     assert "OpenSource Guardian — Available Commands" in mock_switch.posted_messages[0]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Thread Context & Follow-up Tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_thread_context_followup_workflow() -> None:
+    """Verify full maintainer thread workflow: review -> follow-up question -> contextual response."""
+    mock_switch = MockSwitchRestClient()
+
+    class ReviewerWithFindings(PRReviewer):
+        async def review_pr(self, owner: str, repo: str, pr_number: int) -> PRReviewReport:
+            return PRReviewReport(
+                pr_number=pr_number,
+                repo=f"{owner}/{repo}",
+                findings=[
+                    ReviewFinding(
+                        category="TESTING",
+                        severity="WARNING",
+                        message="New service module added without unit test updates.",
+                        file_path="src/service.py",
+                        suggestion="Add tests in tests/test_service.py to verify behavior.",
+                    ),
+                    ReviewFinding(
+                        category="SECURITY",
+                        severity="CRITICAL",
+                        message="Possible hardcoded credential pattern detected.",
+                        file_path="src/config.py",
+                        suggestion="Store secrets in environment variables instead.",
+                    ),
+                ],
+                positive_notes=["Focused change set under 100 lines."],
+                formatted_markdown=f"# Initial Review PR #{pr_number}",
+            )
+
+    dispatcher = SwitchEventDispatcher(
+        switch_client=mock_switch,
+        github_client=GitHubClient(),
+        pr_reviewer=ReviewerWithFindings(github_client=GitHubClient()),
+        default_repo="acme/proj",
+    )
+
+    thread_id = "discord-thread-99"
+
+    # Step 1: Initial PR Review in thread
+    msg_initial = MessagePayload(
+        addressed=True,
+        sender="@contributor:server",
+        sender_name="Amara",
+        body="@guardian review PR #452",
+        thread_id=thread_id,
+    )
+    res_initial = await dispatcher.handle_message(msg_initial, room_id="room-contributions")
+    assert res_initial == "# Initial Review PR #452"
+    assert thread_id in dispatcher.thread_contexts
+    assert dispatcher.thread_contexts[thread_id].last_pr_number == 452
+
+    # Step 2: Maintainer asks about testing in the same thread
+    msg_test = MessagePayload(
+        addressed=True,
+        sender="@maintainer:server",
+        sender_name="Luis",
+        body="@guardian what tests are missing?",
+        thread_id=thread_id,
+    )
+    res_test = await dispatcher.handle_message(msg_test, room_id="room-contributions")
+    assert res_test is not None
+    assert "Test Status for PR #452" in res_test
+    assert "New service module added without unit test updates" in res_test
+    assert "Add tests in tests/test_service.py" in res_test
+
+    # Step 3: Maintainer asks about security in the same thread
+    msg_sec = MessagePayload(
+        addressed=True,
+        sender="@maintainer:server",
+        sender_name="Luis",
+        body="@guardian is there any security concern?",
+        thread_id=thread_id,
+    )
+    res_sec = await dispatcher.handle_message(msg_sec, room_id="room-contributions")
+    assert res_sec is not None
+    assert "Security Status for PR #452" in res_sec
+    assert "Critical Security Concerns Detected" in res_sec
+    assert "Store secrets in environment variables" in res_sec
+
+    # Step 4: Maintainer asks for a summary
+    msg_sum = MessagePayload(
+        addressed=True,
+        sender="@maintainer:server",
+        sender_name="Luis",
+        body="@guardian summarize findings",
+        thread_id=thread_id,
+    )
+    res_sum = await dispatcher.handle_message(msg_sum, room_id="room-contributions")
+    assert res_sum is not None
+    assert "Review Summary for PR #452" in res_sum
+    assert "**Total Findings**: 2 finding(s)" in res_sum
+    assert "1 Critical, 1 Warning" in res_sum
+
+    # Step 5: Contributor asks to review again without repeating PR number
+    msg_rereview = MessagePayload(
+        addressed=True,
+        sender="@contributor:server",
+        sender_name="Amara",
+        body="@guardian review again",
+        thread_id=thread_id,
+    )
+    res_rereview = await dispatcher.handle_message(msg_rereview, room_id="room-contributions")
+    assert res_rereview == "# Initial Review PR #452"
+
+
+def test_thread_context_max_history_eviction() -> None:
+    """Verify bounded memory limits in thread context cache."""
+    dispatcher = SwitchEventDispatcher(
+        switch_client=MockSwitchRestClient(),
+        github_client=GitHubClient(),
+    )
+    dispatcher.MAX_THREAD_HISTORY = 3
+
+    for i in range(5):
+        dispatcher._record_thread_context(
+            thread_id=f"t-{i}",
+            owner="o",
+            repo="r",
+            last_action="review_pr",
+            last_pr_number=i,
+        )
+
+    # Oldest (t-0 and t-1) should have been evicted
+    assert len(dispatcher.thread_contexts) == 3
+    assert "t-0" not in dispatcher.thread_contexts
+    assert "t-1" not in dispatcher.thread_contexts
+    assert "t-2" in dispatcher.thread_contexts
+    assert "t-4" in dispatcher.thread_contexts
+

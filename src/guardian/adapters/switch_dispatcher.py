@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
+from pydantic import BaseModel, ConfigDict, Field
 from src.guardian.adapters.github_client import (
     GitHubAuthError,
     GitHubClient,
@@ -17,13 +18,30 @@ from src.guardian.adapters.switch_protocol import DomainEventFrame, MessagePaylo
 from src.guardian.config import Settings, get_settings
 from src.guardian.modules.issue_finder import IssueFinder
 from src.guardian.modules.onboarding import RepoOnboarder
-from src.guardian.modules.pr_reviewer import PRReviewer
+from src.guardian.modules.pr_reviewer import PRReviewer, ReviewFinding
 
 logger = logging.getLogger("guardian.adapters.switch_dispatcher")
 
 
+class ThreadContext(BaseModel):
+    """Context state for an ongoing conversation thread."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    thread_id: str = Field(description="Unique thread identifier")
+    owner: str = Field(description="Repository owner")
+    repo: str = Field(description="Repository name")
+    last_action: str = Field(description="Last executed action (e.g. review_pr, find_issues)")
+    last_pr_number: int | None = Field(default=None, description="Last reviewed PR number if applicable")
+    last_report_markdown: str | None = Field(default=None, description="Last generated report Markdown")
+    findings: list[ReviewFinding] = Field(default_factory=list, description="Findings from the last review")
+    positive_notes: list[str] = Field(default_factory=list, description="Positive notes from the last review")
+
+
 class SwitchEventDispatcher:
     """Dispatches incoming Switch room / Discord chat events to Guardian core modules."""
+
+    MAX_THREAD_HISTORY = 100
 
     MENTION_PATTERN = re.compile(r"(?i)@(?:opensource-guardian|guardian)\b|!guardian\b")
 
@@ -31,13 +49,21 @@ class SwitchEventDispatcher:
     PR_REVIEW_PATTERN = re.compile(
         r"(?i)(?:review|check)\s+(?:pull\s*request\s*|pr\s*)?#?\s*(?:([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)#)?(\d+)"
     )
+    PR_REREVIEW_PATTERN = re.compile(
+        r"(?i)\b(?:re-?review|review\s+again|check\s+again|recheck|refresh\s+review|update\s+review)\b"
+    )
     FIND_ISSUES_PATTERN = re.compile(
         r"(?i)(?:find|list|show|get|search)?\s*(?:good\s*first\s*issue[s]?|beginner\s*issue[s]?|open\s*issue[s]?|issues)(?:\s+(?:in|for)\s+([a-zA-Z0-9_+#.-]+))?"
     )
     ONBOARD_PATTERN = re.compile(
-        r"(?i)(?:onboard|explain|summarize|summary|overview|guide|intro|architecture)\b"
+        r"(?i)\b(?:onboard|repo\s*summary|explain\s*(?:repo|repository|codebase)|(?:repo|codebase)\s*(?:overview|architecture|guide)|intro)\b"
     )
     REPO_SPEC_PATTERN = re.compile(r"\b([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)\b")
+
+    # Thread follow-up topic patterns
+    TOPIC_TEST_PATTERN = re.compile(r"(?i)\b(?:test|tests|testing|coverage|pytest|unit\s*test)\b")
+    TOPIC_SECURITY_PATTERN = re.compile(r"(?i)\b(?:security|secret|token|key|password|credential|leak)\b")
+    TOPIC_SUMMARY_PATTERN = re.compile(r"(?i)\b(?:summary|summarize|recap|verdict|recommendation|priority|first)\b")
 
     def __init__(
         self,
@@ -55,6 +81,34 @@ class SwitchEventDispatcher:
         self.issue_finder = issue_finder or IssueFinder(github_client=github_client)
         self.pr_reviewer = pr_reviewer or PRReviewer(github_client=github_client)
         self.default_repo = default_repo or settings.default_repo
+        self.thread_contexts: dict[str, ThreadContext] = {}
+
+    def _record_thread_context(
+        self,
+        thread_id: str,
+        owner: str,
+        repo: str,
+        last_action: str,
+        last_pr_number: int | None = None,
+        last_report_markdown: str | None = None,
+        findings: list[ReviewFinding] | None = None,
+        positive_notes: list[str] | None = None,
+    ) -> None:
+        """Record bounded thread conversation context for follow-up questions."""
+        if len(self.thread_contexts) >= self.MAX_THREAD_HISTORY:
+            oldest_key = next(iter(self.thread_contexts))
+            del self.thread_contexts[oldest_key]
+
+        self.thread_contexts[thread_id] = ThreadContext(
+            thread_id=thread_id,
+            owner=owner,
+            repo=repo,
+            last_action=last_action,
+            last_pr_number=last_pr_number,
+            last_report_markdown=last_report_markdown,
+            findings=findings or [],
+            positive_notes=positive_notes or [],
+        )
 
     def is_addressed(self, body: str, addressed_flag: bool = False) -> bool:
         """Determine whether the message was intended for Guardian."""
@@ -81,14 +135,20 @@ class SwitchEventDispatcher:
 
         return "aadesh-2006", "OpenSource-Guardian", cleaned
 
-    def parse_command(self, body: str, addressed_flag: bool = False) -> tuple[str, dict[str, Any]] | None:
+    def parse_command(
+        self,
+        body: str,
+        addressed_flag: bool = False,
+        thread_id: str | None = None,
+    ) -> tuple[str, dict[str, Any]] | None:
         """Parse clean text into a structured command tuple: (command_name, params)."""
         if not self.is_addressed(body, addressed_flag):
             return None
 
         owner, repo, prompt = self._extract_repo_and_clean_text(body)
+        thread_ctx = self.thread_contexts.get(thread_id) if thread_id else None
 
-        # 1. PR Review Command
+        # 1. PR Review Command (explicit PR number)
         pr_match = self.PR_REVIEW_PATTERN.search(prompt)
         if pr_match:
             explicit_repo_part = pr_match.group(1)
@@ -99,17 +159,37 @@ class SwitchEventDispatcher:
                     owner, repo = parts[0], parts[1]
             return "review_pr", {"owner": owner, "repo": repo, "pr_number": int(pr_num_str)}
 
-        # 2. Issue Discovery Command
+        # 2. Contextual Re-review in an existing PR thread
+        if thread_ctx and thread_ctx.last_pr_number and self.PR_REREVIEW_PATTERN.search(prompt):
+            return "review_pr", {
+                "owner": thread_ctx.owner,
+                "repo": thread_ctx.repo,
+                "pr_number": thread_ctx.last_pr_number,
+            }
+
+        # 3. Contextual Thread Follow-up Questions
+        if thread_ctx and thread_ctx.last_action == "review_pr" and thread_ctx.last_pr_number:
+            if self.TOPIC_TEST_PATTERN.search(prompt):
+                return "followup_test", {"context": thread_ctx, "prompt": prompt}
+            if self.TOPIC_SECURITY_PATTERN.search(prompt):
+                return "followup_security", {"context": thread_ctx, "prompt": prompt}
+            if self.TOPIC_SUMMARY_PATTERN.search(prompt):
+                return "followup_summary", {"context": thread_ctx, "prompt": prompt}
+            # General follow-up inquiry about the PR under discussion
+            if any(prompt.lower().startswith(q) for q in ("what", "why", "how", "can", "explain", "is", "tell", "should")):
+                return "followup_general", {"context": thread_ctx, "prompt": prompt}
+
+        # 4. Issue Discovery Command
         issue_match = self.FIND_ISSUES_PATTERN.search(prompt)
         if issue_match and any(keyword in prompt.lower() for keyword in ("issue", "issues")):
             language = issue_match.group(1)
             return "find_issues", {"owner": owner, "repo": repo, "language": language}
 
-        # 3. Repository Onboarding Command
+        # 5. Repository Onboarding Command
         if self.ONBOARD_PATTERN.search(prompt):
             return "onboard", {"owner": owner, "repo": repo}
 
-        # 4. Fallback / Help Command
+        # 6. Fallback / Help Command
         return "help", {"owner": owner, "repo": repo, "prompt": prompt}
 
     async def handle_message(self, message: MessagePayload, room_id: str) -> str | None:
@@ -120,7 +200,7 @@ class SwitchEventDispatcher:
         if "guardian" in message.sender_name.lower():
             return None
 
-        parsed = self.parse_command(message.body, message.addressed)
+        parsed = self.parse_command(message.body, message.addressed, message.thread_id)
         if parsed is None:
             return None
 
@@ -134,6 +214,34 @@ class SwitchEventDispatcher:
                 report = await self.pr_reviewer.review_pr(owner=owner, repo=repo, pr_number=pr_number)
                 reply_content = report.formatted_markdown
 
+                if message.thread_id:
+                    self._record_thread_context(
+                        thread_id=message.thread_id,
+                        owner=owner,
+                        repo=repo,
+                        last_action="review_pr",
+                        last_pr_number=pr_number,
+                        last_report_markdown=report.formatted_markdown,
+                        findings=report.findings,
+                        positive_notes=report.positive_notes,
+                    )
+
+            elif cmd == "followup_test":
+                ctx: ThreadContext = params["context"]
+                reply_content = self._format_followup_test_markdown(ctx)
+
+            elif cmd == "followup_security":
+                ctx = params["context"]
+                reply_content = self._format_followup_security_markdown(ctx)
+
+            elif cmd == "followup_summary":
+                ctx = params["context"]
+                reply_content = self._format_followup_summary_markdown(ctx)
+
+            elif cmd == "followup_general":
+                ctx = params["context"]
+                reply_content = self._format_followup_general_markdown(ctx, params["prompt"])
+
             elif cmd == "find_issues":
                 owner, repo, language = params["owner"], params["repo"], params.get("language")
                 logger.info("Discovering issues for %s/%s (lang=%s)", owner, repo, language)
@@ -142,11 +250,27 @@ class SwitchEventDispatcher:
                 )
                 reply_content = self._format_issues_markdown(discovery_report, owner, repo)
 
+                if message.thread_id:
+                    self._record_thread_context(
+                        thread_id=message.thread_id,
+                        owner=owner,
+                        repo=repo,
+                        last_action="find_issues",
+                    )
+
             elif cmd == "onboard":
                 owner, repo = params["owner"], params["repo"]
                 logger.info("Running onboarding summary for %s/%s", owner, repo)
                 onboard_report = await self.onboarder.onboard(owner=owner, repo=repo)
                 reply_content = self._format_onboarding_markdown(onboard_report)
+
+                if message.thread_id:
+                    self._record_thread_context(
+                        thread_id=message.thread_id,
+                        owner=owner,
+                        repo=repo,
+                        last_action="onboard",
+                    )
 
             else:  # help
                 reply_content = self._format_help_markdown(params["owner"], params["repo"])
@@ -175,6 +299,80 @@ class SwitchEventDispatcher:
         """Top-level handler for DomainEventFrames received over the WebSocket."""
         if frame.data.type == "message" and isinstance(frame.data.payload, MessagePayload):
             await self.handle_message(frame.data.payload, frame.data.room_id)
+
+    # -----------------------------------------------------------------------
+    # Follow-up Formatters for Thread Context
+    # -----------------------------------------------------------------------
+
+    def _format_followup_test_markdown(self, ctx: ThreadContext) -> str:
+        """Format an educational answer regarding testing for the active PR."""
+        test_findings = [f for f in ctx.findings if f.category == "TESTING"]
+        lines = [f"### 🧪 Test Status for PR #{ctx.last_pr_number} (`{ctx.owner}/{ctx.repo}`)", ""]
+        if test_findings:
+            lines.append("⚠️ **Observations on Testing**:")
+            for f in test_findings:
+                lines.append(f"- **{f.message}**")
+                lines.append(f"  *Recommendation*: {f.suggestion}")
+        else:
+            lines.append("✅ **Test Coverage Looks Good!**")
+            lines.append(
+                "No testing deficiencies were flagged. Automated test files were either updated alongside "
+                "the source changes, or the pull request touches only non-executable documentation/configuration."
+            )
+        return "\n".join(lines)
+
+    def _format_followup_security_markdown(self, ctx: ThreadContext) -> str:
+        """Format an educational answer regarding security findings for the active PR."""
+        sec_findings = [f for f in ctx.findings if f.category == "SECURITY"]
+        lines = [f"### 🛡️ Security Status for PR #{ctx.last_pr_number} (`{ctx.owner}/{ctx.repo}`)", ""]
+        if sec_findings:
+            lines.append("🚨 **Critical Security Concerns Detected**:")
+            for f in sec_findings:
+                loc = f"`{f.file_path}:{f.line_number}`" if f.file_path and f.line_number else (f"`{f.file_path}`" if f.file_path else "General")
+                lines.append(f"- **[{f.severity}]** {loc}: {f.message}")
+                lines.append(f"  *Action*: {f.suggestion}")
+            lines.append("")
+            lines.append("> [!CAUTION]")
+            lines.append("> Any committed credentials or private tokens must be immediately revoked and rotated.")
+        else:
+            lines.append("✅ **No Security Secrets Detected!**")
+            lines.append("No obvious hardcoded tokens, AWS credentials, or private cryptographic keys were found in the diff.")
+        return "\n".join(lines)
+
+    def _format_followup_summary_markdown(self, ctx: ThreadContext) -> str:
+        """Format a concise maintainer recap for the active PR."""
+        lines = [
+            f"### 📋 Review Summary for PR #{ctx.last_pr_number} (`{ctx.owner}/{ctx.repo}`)",
+            "",
+            f"- **Total Findings**: {len(ctx.findings)} finding(s)",
+        ]
+        if ctx.positive_notes:
+            lines.append("- **Positive Practices**: " + "; ".join(ctx.positive_notes[:2]))
+        if ctx.findings:
+            severities = [f.severity for f in ctx.findings]
+            lines.append(f"- **Severity Breakdown**: {severities.count('CRITICAL')} Critical, {severities.count('WARNING')} Warning, {severities.count('INFO')} Info")
+            lines.append(f"- **Top Priority**: {ctx.findings[0].message}")
+        else:
+            lines.append("- **Verdict**: Changes are clean, compact, and ready for maintainer review.")
+        lines.append("")
+        lines.append("*Tip: Type `@guardian review again` anytime new commits are pushed to re-run analysis.*")
+        return "\n".join(lines)
+
+    def _format_followup_general_markdown(self, ctx: ThreadContext, prompt: str) -> str:
+        """Provide bounded educational context for general follow-up questions."""
+        lines = [
+            f"### 💬 Thread Follow-up: PR #{ctx.last_pr_number} (`{ctx.owner}/{ctx.repo}`)",
+            "",
+            f"Regarding your question (`\"{prompt[:60]}\"`):",
+            f"As a static heuristic reviewer, I analyzed PR #{ctx.last_pr_number} without executing repository code. "
+            f"There are currently **{len(ctx.findings)}** active review finding(s) in this thread.",
+            "",
+            "**Available Follow-up Actions**:",
+            f"- Ask `@guardian what tests are missing?` for test advice.",
+            f"- Ask `@guardian is this secure?` for credential inspection.",
+            f"- Say `@guardian review again` after pushing new changes.",
+        ]
+        return "\n".join(lines)
 
     # -----------------------------------------------------------------------
     # Markdown Formatters for Chat Display
