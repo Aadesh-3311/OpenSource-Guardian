@@ -18,7 +18,7 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
 | **M5** | Onboarding & Issue Discovery | Repository summary & "good first issue" recommendation modules | **Completed** |
 | **M6** | PR Guardian Reviewer | Educational PR diff parsing & structured code review generator | **Completed** |
 | **M7** | Switch Agent Integration | Switch Agent Bridge connection (WebSocket + REST ops) | **Completed** |
-| **M8** | End-to-End Testing | Live testing across Discord, Switch Room, and GitHub API | Planned |
+| **M8** | End-to-End Testing | Live testing across Discord, Switch Room, and GitHub API | **Completed** |
 | **M9** | Polish & Hackathon Submission | Documentation, demo recording, presentation artifacts | Planned |
 
 ---
@@ -44,10 +44,10 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
   - `.env.example` documenting required configuration variables.
   - Minimal FastAPI application with `/health` endpoint in `src/guardian/main.py`.
 - **Acceptance Criteria**:
-  - [ ] App starts cleanly without runtime errors when running `python -m src.guardian.main` or `uvicorn`.
-  - [ ] `GET /health` returns `200 OK` with service name and status.
-  - [ ] Configuration validates missing required variables with helpful error messages.
-  - [ ] Unit tests for configuration and health checks pass.
+  - [x] App starts cleanly without runtime errors when running `python -m src.guardian.main` or `uvicorn`.
+  - [x] `GET /health` returns `200 OK` with service name and status.
+  - [x] Configuration validates missing required variables with helpful error messages.
+  - [x] Unit tests for configuration and health checks pass.
 
 ---
 
@@ -58,9 +58,9 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
   - Rate limiting detection and error handling.
   - Unit tests with mock responses in `tests/test_github_client.py`.
 - **Acceptance Criteria**:
-  - [ ] Client successfully parses repository information, issues, and PR diffs against public GitHub repositories.
-  - [ ] GitHub rate limiting (403/429) is caught and transformed into a user-friendly domain exception.
-  - [ ] Unit test suite passes without making actual network calls (using pytest mocks/fixtures).
+  - [x] Client successfully parses repository information, issues, and PR diffs against public GitHub repositories.
+  - [x] GitHub rate limiting (403/429) is caught and transformed into a user-friendly domain exception.
+  - [x] Unit test suite passes without making actual network calls (using pytest mocks/fixtures).
 
 ---
 
@@ -70,9 +70,9 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
   - `src/guardian/modules/issue_finder.py`: Queries and ranks beginner-friendly issues (`good first issue`, `documentation`), extracting prerequisites and context.
   - Unit tests covering parsing and ranking heuristics.
 - **Acceptance Criteria**:
-  - [ ] Calling onboarding module on a sample repository returns a clear, structured summary of what the project does and how to run it.
-  - [ ] Issue discovery module filters out closed issues and ranks issues by clarity, providing actionable guidance for first-time contributors.
-  - [ ] Markdown formatters render clean responses suitable for chat displays (Discord).
+  - [x] Calling onboarding module on a sample repository returns a clear, structured summary of what the project does and how to run it.
+  - [x] Issue discovery module filters out closed issues and ranks issues by clarity, providing actionable guidance for first-time contributors.
+  - [x] Markdown formatters render clean responses suitable for chat displays (Discord).
 
 ---
 
@@ -86,10 +86,10 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
     - Basic code pattern smells (hardcoded credentials, debug prints).
   - Generates supportive, constructive reviews focused on helping contributors learn.
 - **Acceptance Criteria**:
-  - [ ] Successfully parses unified git diffs into structured file changes.
-  - [ ] Produces a formatted markdown review report highlighting positive contributions and actionable recommendations.
-  - [ ] Does not execute untrusted PR code under any circumstance.
-  - [ ] Comprehensive unit test suite with sample diff fixtures.
+  - [x] Successfully parses unified git diffs into structured file changes.
+  - [x] Produces a formatted markdown review report highlighting positive contributions and actionable recommendations.
+  - [x] Does not execute untrusted PR code under any circumstance.
+  - [x] Comprehensive unit test suite with sample diff fixtures.
 
 ---
 
@@ -114,9 +114,9 @@ Each milestone has clear deliverables and unambiguous acceptance criteria.
   - Multi-agent interaction test (e.g. OpenSource Guardian collaborating with human maintainers and other Switch agents in the same room).
   - Automated smoke test script verifying the full pipeline.
 - **Acceptance Criteria**:
-  - [ ] A contributor types `@guardian review PR #X` in a Discord channel bridged to Switch, and Guardian replies with an educational PR review in thread.
-  - [ ] A contributor asks for beginner issues, and Guardian provides curated issues with contribution tips.
-  - [ ] Maintainers can ask follow-up questions within the same thread.
+  - [x] A contributor types `@guardian review PR #X` in a Discord channel bridged to Switch, and Guardian replies with an educational PR review in thread.
+  - [x] A contributor asks for beginner issues, and Guardian provides curated issues with contribution tips.
+  - [x] Maintainers can ask follow-up questions within the same thread.
 
 ---
 
