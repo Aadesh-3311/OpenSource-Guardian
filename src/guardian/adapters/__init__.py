@@ -18,6 +18,7 @@ from src.guardian.adapters.switch_client import (
     SwitchNetworkError,
     SwitchNotFoundError,
     SwitchRestClient,
+    SwitchWebSocketClient,
 )
 from src.guardian.adapters.switch_protocol import (
     ConnectionStateFrame,
@@ -62,6 +63,7 @@ __all__ = [
     "SwitchNotFoundError",
     "SwitchProtocolError",
     "SwitchRestClient",
+    "SwitchWebSocketClient",
     "create_pong_frame",
     "parse_switch_frame",
 ]
