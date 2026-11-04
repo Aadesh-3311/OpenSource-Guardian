@@ -58,6 +58,28 @@ class Settings(BaseSettings):
         description="Base URL for the GitHub REST API",
     )
 
+    # Switch Agent Bridge Settings
+    switch_api_url: str = Field(
+        default="http://localhost:8080",
+        description="Base URL for the Switch Agent Bridge",
+    )
+    switch_agent_id: str | None = Field(
+        default=None,
+        description="Registered Switch agent ID",
+    )
+    switch_api_key: SecretStr | None = Field(
+        default=None,
+        description="Secret API key for Switch authentication",
+    )
+    switch_rooms: str = Field(
+        default="default",
+        description="Comma-separated list of Switch room IDs to join",
+    )
+    switch_connection_id: str | None = Field(
+        default=None,
+        description="Optional fixed UUID for Switch WebSocket connection",
+    )
+
     def safe_summary(self) -> dict[str, str | int]:
         """Return non-sensitive configuration parameters for logging or diagnostics."""
         return {
@@ -67,6 +89,9 @@ class Settings(BaseSettings):
             "host": self.host,
             "port": self.port,
             "github_api_base_url": self.github_api_base_url,
+            "switch_api_url": self.switch_api_url,
+            "switch_agent_id": self.switch_agent_id or "",
+            "switch_rooms": self.switch_rooms,
         }
 
 
