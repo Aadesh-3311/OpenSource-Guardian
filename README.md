@@ -25,6 +25,7 @@
 11. [Known Limitations & Current Environment Status](#known-limitations--current-environment-status)
 12. [Project Structure](#project-structure)
 13. [Hackathon Milestone Progression](#hackathon-milestone-progression)
+14. [Switch Demo](#switch-demo)
 
 ---
 
