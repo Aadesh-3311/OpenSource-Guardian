@@ -449,3 +449,23 @@ OpenSource-Guardian/
 - [x] **M7 — Switch Agent Integration**: Switch Agent Bridge WebSocket engine, heartbeats, and REST ops.
 - [x] **M8 — End-to-End Integration & Multi-Agent Collaboration**: E2E pipeline, thread memory, loop guards, and smoke test.
 - [x] **M9 — Polish, Documentation & Hackathon Submission**: Judge-ready README, submission write-up, and demo guide.
+
+
+
+
+
+
+## Hackathon Milestone Progression
+
+- [x] **M0 — Repository Reconnaissance**: Environment verification and initial setup.
+- [x] **M1 — Repository Initialization**: Git workspace setup, `.gitignore`, and foundational layout.
+- [x] **M2 — Architecture & Roadmap Specification**: Comprehensive system architecture and milestone plans.
+- [x] **M3 — Application Foundation & Configuration**: FastAPI skeleton, Pydantic settings, and health probe.
+- [x] **M4 — GitHub Integration Adapter**: Async read-only GitHub REST client and error handling.
+- [x] **M5 — Repository Onboarding & Issue Discovery**: Onboarding engine and beginner issue discovery.
+- [x] **M6 — PR Guardian Reviewer**: Unified diff parser and educational review report generator.
+- [x] **M7 — Switch Agent Integration**: Switch Agent Bridge WebSocket engine, heartbeats, and REST ops.
+- [x] **M8 — End-to-End Integration & Multi-Agent Collaboration**: E2E pipeline, thread memory, loop guards, and smoke test.
+- [x] **M9 — Polish, Documentation & Hackathon Submission**: Judge-ready README, submission write-up, and demo guide.
+
+
